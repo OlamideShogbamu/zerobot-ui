@@ -5,9 +5,9 @@ import { useState } from 'react';
 export default function FaqBotForm() {
   const [faqBotName, setFaqBotName] = useState('');
   const [defaultMessage, setDefaultMessage] = useState('');
-  const [questions, setQuestions] = useState([{ q: '', a: '' }, { q: '', a: '' }]);
+  const [questions, setQuestions] = useState({});
   const [apiKey, setApiKey] = useState('');
-  const [provider, setProvider] = useState('Open AI');
+  const [provider, setProvider] = useState('groq-llama');
   const [document, setDocument] = useState<File | null>(null);
   const [faqJsonFile, setFaqJsonFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,11 +22,17 @@ export default function FaqBotForm() {
     setLoading(true);
     const formData = new FormData();
 
+    // Pack questions into an object
+    const faqs = Object.entries(questions).map(([question, answer]) => ({
+      question,
+      answer,
+    }));
+
     const botData = {
       name: faqBotName,
       greeting: defaultMessage,
       fallback: "I'm sorry, I don't have an answer yet.",
-      faq: questions,
+      faqs: faqs,
       llm_provider: provider,
       llm_api_key: apiKey,
     };
@@ -84,16 +90,16 @@ export default function FaqBotForm() {
       />
 
       <h2 className="text-l font-bold mb-2">Bot messages</h2>
-      {questions.map((pair, index) => (
+      {Object.entries(questions).map(([question, answer], index) => (
         <div className="grid grid-cols-2 gap-4 mb-4" key={index}>
           <input
             type="text"
             placeholder={`Question ${index + 1}`}
             className="border border-gray-300 rounded p-2 placeholder:text-sm"
-            value={pair.q}
+            value={question}
             onChange={(e) => {
-              const updated = [...questions];
-              updated[index].q = e.target.value;
+              const updated = { ...questions, [e.target.value]: answer };
+              delete updated[question]; // Remove the old question key
               setQuestions(updated);
             }}
           />
@@ -101,107 +107,110 @@ export default function FaqBotForm() {
             type="text"
             placeholder={`Answer ${index + 1}`}
             className="border border-gray-300 rounded p-2 placeholder:text-sm"
-            value={pair.a}
+            value={answer}
             onChange={(e) => {
-              const updated = [...questions];
-              updated[index].a = e.target.value;
+              const updated = { ...questions, [question]: e.target.value };
               setQuestions(updated);
             }}
           />
         </div>
       ))}
 
-    <div className="text-sm text-gray-500 mb-6">
-    <span
-        onClick={() =>
-        setQuestions((prev) => [...prev, { q: '', a: '' }])
-        }
-        className="text-blue-600 underline cursor-pointer hover:text-blue-800 mr-2"
-    >
-        Add more question and answer
-    </span>
-    •{' '}
-    <label
-        htmlFor="jsonUpload"
-        className="text-blue-600 underline cursor-pointer hover:text-blue-800"
-    >
-        Upload JSON
-    </label>
-    <input
-        id="jsonUpload"
-        type="file"
-        accept="application/json"
-        className="hidden"
-        onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-            try {
-                const json = JSON.parse(event.target?.result as string);
-                console.log("Uploaded JSON:", json);
-                // Optional: Validate format before updating
-                if (Array.isArray(json) && json.every(item => 'q' in item && 'a' in item)) {
-                setQuestions(json);
-                } else {
-                alert("Invalid format. JSON must be an array of {q, a} objects.");
-                }
-            } catch (err) {
-                alert("Invalid JSON file");
-            }
-            };
-            reader.readAsText(file);
-        }
-        }}
-    />
-    </div>
-
-    <h2 className="text-l font-bold mb-2">Use AI</h2>
-    <div className="bg-gray-100 p-4 rounded-lg mb-6">
-    <div className="mb-5 text-sm">
-        <label className="block text-gray-600 text-sm mb-1">Select LLM provider</label>
-        <select
-        className="w-full border border-gray-300 rounded p-2 text-sm"
-        value={provider}
-        onChange={(e) => setProvider(e.target.value)}
+      <div className="text-sm text-gray-500 mb-6">
+        <span
+          onClick={() =>
+            setQuestions((prev) => ({ ...prev, [`Question ${Object.keys(prev).length + 1}`]: '' }))
+          }
+          className="text-blue-600 underline cursor-pointer hover:text-blue-800 mr-2"
         >
-        <option>Open AI</option>
-        <option>Cohere</option>
-        <option>groq-llama</option>
-        <option>Anthropic</option>
-        </select>
-    </div>
-
-    <div className="mb-4">
-        <label className="block text-gray-600 text-sm mb-2">Upload document</label>
-        <div className="border border-dashed border-gray-400 rounded p-6 text-center">
-        <input type="file" className="hidden" id="fileUpload" onChange={handleFileUpload} />
-        <label htmlFor="fileUpload" className="cursor-pointer text-gray-500">
-            <div className="text-4xl mb-2">⬆️</div>
-            {document ? document.name : 'Upload document'}
+          Add more question and answer
+        </span>
+        •{' '}
+        <label
+          htmlFor="jsonUpload"
+          className="text-blue-600 underline cursor-pointer hover:text-blue-800"
+        >
+          Upload JSON
         </label>
-        </div>
-    </div>
-
-    <div>
-        <label className="block text-gray-600 text-sm mb-2">API key</label>
         <input
-        type="text"
-        className="w-full border border-gray-300 rounded p-2 placeholder:text-sm"
-        placeholder="Enter your API key"
-        value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
+          id="jsonUpload"
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                try {
+                  const json = JSON.parse(event.target?.result as string);
+                  console.log("Uploaded JSON:", json);
+                  // Optional: Validate format before updating
+                  if (Array.isArray(json) && json.every(item => 'q' in item && 'a' in item)) {
+                    const newQuestions = json.reduce((acc, item) => {
+                      acc[item.q] = item.a; // Convert to object format
+                      return acc;
+                    }, {});
+                    setQuestions(newQuestions);
+                  } else {
+                    alert("Invalid format. JSON must be an array of {q, a} objects.");
+                  }
+                } catch (err) {
+                  alert("Invalid JSON file");
+                }
+              };
+              reader.readAsText(file);
+            }
+          }}
         />
-    </div>
-    </div>
+      </div>
 
-    <button
+      <h2 className="text-l font-bold mb-2">Use AI</h2>
+      <div className="bg-gray-100 p-4 rounded-lg mb-6">
+        <div className="mb-5 text-sm">
+          <label className="block text-gray-600 text-sm mb-1">Select LLM provider</label>
+          <select
+            className="w-full border border-gray-300 rounded p-2 text-sm"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+          >
+            <option>Open AI</option>
+            <option>Cohere</option>
+            <option>groq-llama</option>
+            <option>Anthropic</option>
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-gray-600 text-sm mb-2">Upload document</label>
+          <div className="border border-dashed border-gray-400 rounded p-6 text-center">
+            <input type="file" className="hidden" id="fileUpload" onChange={handleFileUpload} />
+            <label htmlFor="fileUpload" className="cursor-pointer text-gray-500">
+              <div className="text-4xl mb-2">⬆️</div>
+              {document ? document.name : 'Upload document'}
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-gray-600 text-sm mb-2">API key</label>
+          <input
+            type="text"
+            className="w-full border border-gray-300 rounded p-2 placeholder:text-sm"
+            placeholder="Enter your API key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <button
         onClick={handleSubmit}
         className="w-full bg-orange-500 text-white py-3 rounded hover:bg-orange-600 font-semibold"
         disabled={loading}
-    >
+      >
         {loading ? 'Creating...' : 'Create Bot'}
-    </button>
+      </button>
     </div>
   );
 }
